@@ -1,0 +1,149 @@
+---
+layout: default
+title: Agent Authorization Protocol
+---
+
+<section class="hero">
+  <div class="hero-label">Open Protocol</div>
+  <h1>An open standard for internet-native agent authorization</h1>
+  <p class="subtitle">One token that lets any AI agent prove what it's authorized to do, who authorized it, and when that authorization expires. Verifiable on-chain and off-chain. No vaults, no per-service keys, no human in the loop.</p>
+  <div class="hero-links">
+    <a href="/whitepaper" class="primary">Read the White Paper</a>
+    <a href="/design" class="secondary">Design Doc</a>
+  </div>
+</section>
+
+<section class="code-section">
+  <h2>Verify agent authorization in one line</h2>
+  <div class="code-block">
+    <span class="comment">// npm install @x401/verify</span><br><br>
+    <span class="keyword">import</span> { <span class="function">verifyACT</span> } <span class="keyword">from</span> <span class="string">'@x401/verify'</span>;<br><br>
+    <span class="type">app</span>.<span class="function">get</span>(<span class="string">'/api/data'</span>, <span class="function">verifyACT</span>({ <span class="type">require</span>: <span class="string">'https://api.example.com/data:read'</span> }), handler);
+  </div>
+</section>
+
+<section class="props">
+  <div class="props-grid">
+    <div class="prop">
+      <h3>Self-contained</h3>
+      <p>An Agent Capability Token carries everything a verifier needs: who authorized the agent, what it can do, quantitative limits, expiry, and the full delegation chain. Verification is a local cryptographic operation.</p>
+    </div>
+    <div class="prop">
+      <h3>On-chain native</h3>
+      <p>Smart contracts verify ACTs natively in the VM. ~5,000 compute units on Solana, ~50K gas on EVM. No oracles, no gateways. Combined with x402, an agent proves authorization and pays in a single HTTP roundtrip.</p>
+    </div>
+    <div class="prop">
+      <h3>Delegation chains</h3>
+      <p>Human to orchestrator to worker to sub-worker. Each hop carries cryptographic proof of delegation with provable attenuation. The final agent in the chain traces back to the human's original scoped authorization.</p>
+    </div>
+  </div>
+</section>
+
+<section class="comparison">
+  <h2>We need a new way to authorize agents</h2>
+  <p class="lead">The old way of managing credentials was barely working for a human world, let alone an agentic future.</p>
+
+  <div class="comparison-grid">
+    <div class="comparison-col old">
+      <h3>The Old Way</h3>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>Create API key per service</strong>
+          <span>Manual setup, different dashboard every time</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>Learn each service's scoping syntax</strong>
+          <span>Stripe scopes, GitHub PAT permissions, AWS IAM policies</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>Store credentials in a centralized vault</strong>
+          <span>Single point of failure, agent locked out if vault goes down</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <strong>Agent fetches token per request</strong>
+          <span>Round-trip to vault every time, latency on every call</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-text">
+          <strong>Revoke per service when compromised</strong>
+          <span>Log into each dashboard, hope you remember them all</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-col new">
+      <h3>With x401</h3>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>Human signs one authorization with scoped capabilities</strong>
+          <span>One consent flow, all services covered</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>Agent carries self-contained proof</strong>
+          <span>No vault, no round-trips, no dependencies</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>Any service verifies locally</strong>
+          <span>Works on-chain and off-chain, no callbacks</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="flow">
+  <h2>How it works</h2>
+
+  <div class="flow-steps">
+    <div class="flow-step">
+      <div class="num">01</div>
+      <h3>Agent Request</h3>
+      <p>An AI agent requests access to an API, on-chain resource, or any service endpoint.</p>
+    </div>
+
+    <div class="flow-step">
+      <div class="num">02</div>
+      <h3>Authorization Required</h3>
+      <p>If no valid ACT is attached, the server responds with <code>HTTP 401</code> specifying the required capabilities.</p>
+    </div>
+
+    <div class="flow-step">
+      <div class="num">03</div>
+      <h3>Agent Attaches ACT</h3>
+      <p>The agent includes its Agent Capability Token in the <code>Authorization: ACT</code> header.</p>
+    </div>
+
+    <div class="flow-step">
+      <div class="num">04</div>
+      <h3>Service Verifies</h3>
+      <p>The service verifies the ACT locally (signature chain, capabilities, limits) and serves the request. No round-trip to any external service.</p>
+    </div>
+  </div>
+</section>
