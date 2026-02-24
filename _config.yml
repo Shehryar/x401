@@ -1,7 +1,7 @@
 title: x401
 description: An open standard for internet-native agent authorization
-url: ""
-baseurl: ""
+url: "https://shehryar.github.io"
+baseurl: "/x401"
 
 markdown: kramdown
 kramdown:
