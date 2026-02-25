@@ -81,9 +81,66 @@ The IETF is working on this — AAuth and the OAuth On-Behalf-Of draft add agent
 
 #### On-chain (zero infrastructure, maximum differentiation)
 
+```
+                        x401: Core Protocol Flow
+
+  ┌──────────┐                                        ┌──────────────┐
+  │  Human   │                                        │   Service    │
+  │          │                                        │  (API / SC)  │
+  └────┬─────┘                                        └──────┬───────┘
+       │                                                     │
+       │  1. Sign delegation                                 │
+       │     (wallet / passkey)                              │
+       │                                                     │
+       ▼                                                     │
+  ┌──────────┐         2. Request access              ┌──────┴───────┐
+  │  Agent   │ ──────────────────────────────────────▶ │   Service    │
+  │          │                                        │              │
+  │ carries  │         3. HTTP 401 + required caps    │  "what auth  │
+  │  ACT     │ ◀────────────────────────────────────── │   do you     │
+  │          │                                        │   need?"     │
+  │          │         4. ACT in Authorization header  │              │
+  │          │ ──────────────────────────────────────▶ │  verify      │
+  │          │            Authorization: ACT eyJ...    │  locally ✓   │
+  │          │                                        │              │
+  │          │         5. Response                     │  execute ✓   │
+  │          │ ◀────────────────────────────────────── │              │
+  └──────────┘                                        └──────────────┘
+```
+
 **1. Trustless on-chain agent execution.**
 
 A DeFi protocol's smart contract can verify, on-chain, that a transaction was authorized by a specific human with specific limits. Not "trust the wallet provider." Actual cryptographic verification at the point of execution. The spending limits are enforced by the protocol's math, not by hoping the agent's infrastructure works correctly. No oracles, no gateways, no external services. The chain IS the verifier.
+
+```
+               On-Chain: Zero Infrastructure, Native Verification
+
+  ┌──────────┐        ┌──────────┐        ┌─────────────────────────────┐
+  │  Human   │        │  Agent   │        │  Smart Contract (On-Chain)  │
+  └────┬─────┘        └────┬─────┘        └──────────────┬──────────────┘
+       │                   │                             │
+       │  sign delegation  │                             │
+       │  (Phantom/MM)     │                             │
+       │──────────────────▶│                             │
+       │                   │                             │
+       │                   │  submit tx with ACT         │
+       │                   │────────────────────────────▶│
+       │                   │                             │
+       │                   │                   ┌─────────┴─────────┐
+       │                   │                   │ verify human sig ✓│
+       │                   │                   │ verify agent sig ✓│
+       │                   │                   │ check expiry     ✓│
+       │                   │                   │ check limits     ✓│
+       │                   │                   │ execute           │
+       │                   │                   └─────────┬─────────┘
+       │                   │                             │
+       │                   │  tx confirmed               │
+       │                   │◀────────────────────────────│
+       │                   │                             │
+
+          ~5,000 CU on Solana  /  ~50K gas on EVM
+          No oracles. No gateways. The chain IS the verifier.
+```
 
 **2. Authorization + payment in one request.**
 
@@ -105,6 +162,23 @@ Human → orchestrator → worker → sub-worker. Each hop carries a cryptograph
 - Human → portfolio manager (500 USDC/day) → DCA bot (100 USDC/day Jupiter) → swap executor (10 USDC/swap)
 - Human → coding agent (push to staging) → test agent (read-only) → deploy agent (deploy to staging only, not prod)
 - Human → travel agent ($2K budget) → flight booker ($1K, domestic) → seat selector ($50 upgrade limit)
+
+```
+                 Delegation Chain with Attenuation
+
+  ┌──────────┐      ┌──────────────┐      ┌──────────┐      ┌──────────┐
+  │  Human   │─────▶│ Orchestrator │─────▶│  Worker  │─────▶│ Executor │
+  │          │ sign │              │ sign │          │ sign │          │
+  └──────────┘      └──────────────┘      └──────────┘      └──────────┘
+   500 USDC/day      500 USDC/day          100 USDC/day      10 USDC/swap
+   any Jupiter       any Jupiter           SOL-USDC only     SOL-USDC only
+   ─────────────────────────────────────────────────────────────────────▶
+                     each hop narrows, never widens
+
+  Executor tries 15 USDC?  → tx reverts (exceeds 10/swap)
+  Worker tries SOL-ETH?    → verification fails (not in capability URI)
+  Human revokes the root?  → every sub-delegation dies instantly
+```
 
 Any service receiving a request from the final agent can verify the entire chain in one step.
 
@@ -1804,15 +1878,38 @@ x401 doesn't require them to. The protocol works through **capability gateways**
 #### How it works
 
 ```
-Agent presents ACT with gmail:alice@co.com/send:domain:co.com
-  → Gateway verifies ACT (local JWT check)
-  → Gateway checks on-chain limit account (if enforce: onchain)
-  → Gateway has Alice's Gmail OAuth token stored (she authorized it during setup)
-  → Gateway enforces x401 constraints:
-      - domain restriction: is recipient @co.com? ✓
-      - count limit: is this email #37 of 50? ✓
-  → Gateway calls Gmail API with the OAuth token
-  → Returns result to agent
+              Capability Gateway: Works Without Service Adoption
+
+  ┌──────────┐        ┌─────────────────────────┐        ┌───────────────┐
+  │          │        │   Capability Gateway     │        │   Existing    │
+  │  Agent   │        │                         │        │   Service     │
+  │          │        │  • Verify ACT (local)   │        │               │
+  │ carries  │        │  • Enforce x401 limits  │        │  Gmail        │
+  │ ACT      │        │  • Translate to native  │        │  GitHub       │
+  │          │        │    API calls            │        │  Slack        │
+  └────┬─────┘        └────────────┬────────────┘        └───────┬───────┘
+       │                           │                             │
+       │  Authorization: ACT eyJ.. │                             │
+       │──────────────────────────▶│                             │
+       │                           │                             │
+       │                 ┌─────────┴─────────┐                   │
+       │                 │ verify ACT       ✓│                   │
+       │                 │ check limits     ✓│                   │
+       │                 │ domain: @co.com? ✓│                   │
+       │                 │ count: 37/50?   ✓│                   │
+       │                 └─────────┬─────────┘                   │
+       │                           │                             │
+       │                           │  OAuth token / API key      │
+       │                           │────────────────────────────▶│
+       │                           │                             │
+       │                           │  API response               │
+       │                           │◀────────────────────────────│
+       │                           │                             │
+       │  result                   │                             │
+       │◀──────────────────────────│                             │
+
+       The agent never touches the real credentials.
+       The service has no idea x401 exists.
 ```
 
 The gateway is an **x401-to-OAuth bridge**. It translates x401 capabilities into native API actions. The agent sees one credential (its ACT). The gateway sees two credentials (the ACT from the agent, the OAuth token for the service). The service (Gmail) sees a normal OAuth request and has no idea x401 exists.
@@ -1822,15 +1919,24 @@ The gateway is an **x401-to-OAuth bridge**. It translates x401 capabilities into
 Auth0's Token Vault has a similar architecture: it stores OAuth tokens and gives agents access to them. The core pattern is the same — something sits between the agent and the service, holding credentials. The differences are in how the agent authenticates to the gateway and what controls are available.
 
 ```
-Auth0 Token Vault:
-  Agent → Auth0 (present Auth0 JWT, fetch Gmail token) → Gmail API
-  Agent identity verified locally (JWT). Token fetch is a round-trip to Auth0.
-  Sensitive actions trigger CIBA push notification for per-action approval.
+  Auth0 Token Vault:
 
-x401 gateway:
-  Agent → x401 Gateway (present ACT, verify locally, enforce limits) → Gmail API
-  ACT verified locally (JWT + delegation chain). No round-trip for verification.
-  Pre-authorized capabilities with quantitative limits. No per-action approval.
+  Agent ──── Auth0 JWT ────▶ Auth0 ──── fetch token ────▶ Gmail API
+                              │  (round-trip to Auth0)
+                              │  sensitive action?
+                              │  → CIBA push notification
+                              │  → wait for human approval
+                              │  → then proceed
+
+  ─────────────────────────────────────────────────────────────────
+
+  x401 Gateway:
+
+  Agent ──── ACT ────▶ Gateway ──── OAuth token ────▶ Gmail API
+                         │  (verify locally, no round-trip)
+                         │  check limits: 37/50 emails ✓
+                         │  check domain: @co.com ✓
+                         │  → proceed immediately
 ```
 
 The practical differences: x401's ACT carries the full authorization scope and limits in the token itself, so the gateway can verify and enforce without calling any external service. Auth0's Token Vault enforces policies server-side in Auth0's infrastructure. The agent-facing credentials are also different — one ACT across all services vs. separate OAuth tokens fetched per service.
@@ -1882,6 +1988,31 @@ The protocol doesn't need universal native adoption to be useful. Three tiers of
 - Accept ACTs directly, no gateway needed
 - Happens when enough agents present ACTs that it's worth supporting natively
 - The gateway creates demand; native adoption follows demand
+
+```
+          Three Paths: x401 Works at Every Adoption Level
+
+  ───────────────────────────────────────────────────────────────────
+
+  ON-CHAIN        Agent ──── ACT ────▶ Smart Contract     Zero adoption
+  (Tier 1)                             verifies natively   needed. The chain
+                                       in VM               IS the verifier.
+
+  ───────────────────────────────────────────────────────────────────
+
+  GATEWAY         Agent ──── ACT ────▶ Gateway ──────────▶ Gmail
+  (Tier 2)                             verifies ACT,       GitHub
+                                       bridges to          Slack
+                                       native API          (no changes)
+
+  ───────────────────────────────────────────────────────────────────
+
+  NATIVE          Agent ──── ACT ────▶ New API Service     One line of
+  (Tier 3)                             verifyACT()         middleware.
+                                       middleware          Full protocol.
+
+  ───────────────────────────────────────────────────────────────────
+```
 
 #### Gateway as a product
 
