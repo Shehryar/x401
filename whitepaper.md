@@ -120,6 +120,23 @@ That's it. The middleware decodes the ACT from the `Authorization` header, verif
 
 The x401 protocol follows a simple four-step flow:
 
+```
+  ┌──────────┐                                        ┌──────────────┐
+  │  Agent   │         1. Request access               │   Service    │
+  │          │ ──────────────────────────────────────▶ │              │
+  │          │                                        │              │
+  │          │         2. HTTP 401 + required caps     │  "you need   │
+  │          │ ◀────────────────────────────────────── │   ACT with   │
+  │          │            { required: "...data:read" } │   data:read" │
+  │          │                                        │              │
+  │          │         3. Authorization: ACT eyJ...    │              │
+  │          │ ──────────────────────────────────────▶ │  verify      │
+  │          │                                        │  locally ✓   │
+  │          │         4. Response                     │              │
+  │          │ ◀────────────────────────────────────── │  execute ✓   │
+  └──────────┘                                        └──────────────┘
+```
+
 **1. Agent Request.** An AI agent requests access to an API, on-chain resource, or any service endpoint.
 
 **2. Authorization Required (401).** If no valid ACT is attached, the server responds with HTTP 401 Unauthorized, specifying the required capabilities:
@@ -236,6 +253,29 @@ You review the capabilities, the limits, the expiry. You sign with your wallet. 
 
 The agent has an active ACT. You tell it "push the fix to staging." Behind the scenes:
 
+```
+  Agent                      Gateway                       GitHub
+    │                           │                             │
+    │  ACT + Proof-of-Possession│                             │
+    │──────────────────────────▶│                             │
+    │                           │                             │
+    │                 ┌─────────┴─────────┐                   │
+    │                 │ 1. verify ACT   ✓ │                   │
+    │                 │ 2. verify proof ✓ │                   │
+    │                 │ 3. read on-chain  │                   │
+    │                 │    counter: 7/20 ✓│                   │
+    │                 └─────────┬─────────┘                   │
+    │                           │                             │
+    │                           │  push via OAuth token       │
+    │                           │────────────────────────────▶│
+    │                           │                             │
+    │                           │  success                    │
+    │                           │◀────────────────────────────│
+    │                           │                             │
+    │  "pushed to staging"      │                             │
+    │◀──────────────────────────│                             │
+```
+
 1. The agent generates a proof-of-possession JWT — signed with its private key, bound to this specific request, this URL, this body, expires in 60 seconds.
 2. It sends the request with the ACT in the `Authorization` header and the proof in `X-X401-Proof`.
 3. The gateway verifies both locally in milliseconds.
@@ -304,6 +344,33 @@ The core pattern: you interact with x401 at authorization boundaries, not during
 
 This is where the protocol is purest. A DeFi protocol's smart contract verifies, on-chain, that a transaction was authorized by a specific human with specific limits. Not "trust the wallet provider." Actual cryptographic verification at the point of execution. No oracles, no gateways, no external services. The chain IS the verifier.
 
+```
+  ┌──────────┐        ┌──────────┐        ┌─────────────────────────────┐
+  │  Human   │        │  Agent   │        │  Smart Contract (On-Chain)  │
+  └────┬─────┘        └────┬─────┘        └──────────────┬──────────────┘
+       │                   │                             │
+       │  sign delegation  │                             │
+       │  (Phantom / MM)   │                             │
+       │──────────────────▶│                             │
+       │                   │                             │
+       │                   │  submit tx with ACT         │
+       │                   │────────────────────────────▶│
+       │                   │                             │
+       │                   │                   ┌─────────┴─────────┐
+       │                   │                   │ verify human sig ✓│
+       │                   │                   │ verify agent sig ✓│
+       │                   │                   │ check expiry     ✓│
+       │                   │                   │ check limits     ✓│
+       │                   │                   │ execute           │
+       │                   │                   └─────────┬─────────┘
+       │                   │                             │
+       │                   │  tx confirmed               │
+       │                   │◀────────────────────────────│
+
+          ~5,000 CU on Solana  /  ~50K gas on EVM
+          No oracles. No gateways. The chain IS the verifier.
+```
+
 Combined with x402, an agent can prove authorization AND pay in a single HTTP roundtrip. The ACT and x402 payment are cryptographically linked via the same wallet:
 
 ```
@@ -354,9 +421,66 @@ Not all domains have the same infrastructure requirements. This matters for how 
 | **New APIs / MCP servers** | **One middleware line.** Service owner adds `verifyACT()`. Self-verifying JWT, no callbacks, no external dependency. |
 | **Existing off-chain services (Gmail, GitHub, Slack)** | **Gateway required.** These services don't speak x401 and won't anytime soon. A capability gateway verifies ACTs on the agent-facing side and calls native APIs on the service side. Pragmatic, not pure. |
 
+```
+          x401 Works at Every Adoption Level
+
+  ───────────────────────────────────────────────────────────────────
+
+  ON-CHAIN        Agent ──── ACT ────▶ Smart Contract     Zero adoption
+                                       verifies natively   needed. The chain
+                                       in VM               IS the verifier.
+
+  ───────────────────────────────────────────────────────────────────
+
+  GATEWAY         Agent ──── ACT ────▶ Gateway ──────────▶ Gmail
+                                       verifies ACT,       GitHub
+                                       bridges to          Slack
+                                       native API          (no changes)
+
+  ───────────────────────────────────────────────────────────────────
+
+  NATIVE          Agent ──── ACT ────▶ New API Service     One line of
+                                       verifyACT()         middleware.
+                                       middleware          Full protocol.
+
+  ───────────────────────────────────────────────────────────────────
+```
+
 For crypto and on-chain use cases, x401 is genuinely infrastructure-free. The protocol's purest expression is on-chain: human signs a delegation, agent carries it, smart contract verifies it, done. No servers, no accounts, no intermediaries.
 
-For off-chain legacy services, the gateway is a pragmatic bridge. It works today, it's better than the alternatives (pre-authorized limits instead of per-action approval), and it creates demand for native adoption. But it's not the end state — as agent traffic grows, services have incentive to accept ACTs directly.
+For off-chain legacy services, the capability gateway is a pragmatic bridge. The agent presents its ACT. The gateway verifies it locally, enforces x401 constraints (domain restrictions, count limits, spending caps), and calls the native API with stored OAuth credentials. The service has no idea x401 exists.
+
+```
+  ┌──────────┐        ┌─────────────────────────┐        ┌───────────────┐
+  │  Agent   │        │   Capability Gateway     │        │   Existing    │
+  │          │        │                         │        │   Service     │
+  │ carries  │        │  • Verify ACT (local)   │        │               │
+  │ ACT      │        │  • Enforce x401 limits  │        │  Gmail        │
+  └────┬─────┘        └────────────┬────────────┘        └───────┬───────┘
+       │                           │                             │
+       │  Authorization: ACT eyJ.. │                             │
+       │──────────────────────────▶│                             │
+       │                           │                             │
+       │                 ┌─────────┴─────────┐                   │
+       │                 │ verify ACT       ✓│                   │
+       │                 │ check limits     ✓│                   │
+       │                 │ domain: @co.com? ✓│                   │
+       │                 └─────────┬─────────┘                   │
+       │                           │                             │
+       │                           │  OAuth token / API key      │
+       │                           │────────────────────────────▶│
+       │                           │                             │
+       │                           │  API response               │
+       │                           │◀────────────────────────────│
+       │                           │                             │
+       │  result                   │                             │
+       │◀──────────────────────────│                             │
+
+       The agent never touches the real credentials.
+       The service has no idea x401 exists.
+```
+
+This works today, it's better than the alternatives (pre-authorized limits instead of per-action approval), and it creates demand for native adoption. As agent traffic grows, services have incentive to accept ACTs directly and skip the middleman.
 
 ### 6.5 Progressive Authorization
 
@@ -394,10 +518,20 @@ A human authorizes an orchestrator agent. The orchestrator delegates narrower pe
 A portfolio manager agent is authorized for 500 USDC per day in swaps. It delegates to a DCA bot capped at 100 USDC per day, SOL-USDC only. The DCA bot delegates to a swap executor with 10 USDC per trade maximum. The DEX smart contract verifies the full chain in one transaction.
 
 ```
-Human (500 USDC/day, any pair)
-  → Portfolio Manager (500 USDC/day, any pair)
-    → DCA Bot (100 USDC/day, SOL-USDC only)
-      → Swap Executor (10 USDC/trade, SOL-USDC only)
+                 Delegation Chain with Attenuation
+
+  ┌──────────┐      ┌──────────────┐      ┌──────────┐      ┌──────────┐
+  │  Human   │─────▶│ Orchestrator │─────▶│  Worker  │─────▶│ Executor │
+  │          │ sign │              │ sign │          │ sign │          │
+  └──────────┘      └──────────────┘      └──────────┘      └──────────┘
+   500 USDC/day      500 USDC/day          100 USDC/day      10 USDC/swap
+   any Jupiter       any Jupiter           SOL-USDC only     SOL-USDC only
+   ─────────────────────────────────────────────────────────────────────▶
+                     each hop narrows, never widens
+
+  Executor tries 15 USDC?  → tx reverts (exceeds 10/swap)
+  Worker tries SOL-ETH?    → verification fails (not in capability URI)
+  Human revokes the root?  → every sub-delegation dies instantly
 ```
 
 Each link in the chain carries a cryptographic signature proving delegation and provable attenuation. Capabilities can only narrow. Limits can only decrease. Expiry can only shorten. A sub-agent can never grant itself more authority than its parent.
@@ -552,6 +686,52 @@ For off-chain-only use cases, passkeys and WebAuthn are supported as the signing
 ### 9.4 Verification Algorithm
 
 Verification is a deterministic local operation:
+
+```
+  Incoming request
+       │
+       ▼
+  ┌─────────────────┐
+  │ 1. Decode JWT   │
+  └────────┬────────┘
+       │
+       ▼
+  ┌─────────────────┐     ┌─────────────────┐
+  │ 2. Verify agent │     │ 3. Verify proof  │
+  │    signature    │     │    of possession │
+  └────────┬────────┘     └────────┬────────┘
+       │                       │
+       └───────────┬───────────┘
+                   ▼
+  ┌─────────────────────────┐
+  │ 4. Check time bounds    │
+  │    nbf <= now <= exp    │
+  └────────────┬────────────┘
+               ▼
+  ┌─────────────────────────┐
+  │ 5. Walk delegation chain│
+  │    verify each sig,     │
+  │    check attenuation    │
+  └────────────┬────────────┘
+               ▼
+  ┌─────────────────────────┐
+  │ 6. Verify root          │
+  │    chain → human (sub)  │
+  └────────────┬────────────┘
+               ▼
+  ┌─────────────────┐     ┌─────────────────┐
+  │ 7. Capability   │     │ 8. Limit check  │
+  │    match        │     │                 │
+  └────────┬────────┘     └────────┬────────┘
+       │                       │
+       └───────────┬───────────┘
+                   ▼
+  ┌─────────────────────────┐
+  │ 9. Revocation check     │
+  └────────────┬────────────┘
+               ▼
+           ✓ PASS → execute request
+```
 
 1. **Decode JWT** — parse header, payload, signature
 2. **Verify agent signature** — confirm the JWT was signed by the agent identified in `iss`
