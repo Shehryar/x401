@@ -1,0 +1,70 @@
+{
+  "_comment": "Example Agent Capability Token (ACT) — JWT header + payload",
+
+  "header": {
+    "typ": "act+jwt",
+    "alg": "EdDSA",
+    "kid": "did:key:z6MkAgent..."
+  },
+
+  "payload": {
+    "iss": "did:key:zQ3shAgent...",
+    "sub": "did:key:zQ3shHuman...",
+    "aud": "*",
+    "exp": 1740672154,
+    "nbf": 1740672089,
+    "jti": "0xdeadbeef1234567890abcdef",
+
+    "cap": [
+      {
+        "_comment": "Transfer up to 100 USDC/day on Solana",
+        "uri": "solana:mainnet/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/transfer",
+        "lim": { "amt": "100000000", "per": 86400 }
+      },
+      {
+        "_comment": "Read market data, max 1000 requests/hour",
+        "uri": "https://api.example.com/data",
+        "act": ["read"],
+        "lim": { "rate": [1000, 3600] }
+      },
+      {
+        "_comment": "Send emails from alice, only to example.com, max 50/day",
+        "uri": "gmail:alice@example.com/send:domain:example.com",
+        "lim": { "cnt": 50, "per": 86400 }
+      },
+      {
+        "_comment": "Push to staging branch only, max 20 pushes/day",
+        "uri": "github:acme/backend/push:branch:staging",
+        "lim": { "cnt": 20, "per": 86400 }
+      }
+    ],
+
+    "dlg": {
+      "iss": "did:key:zQ3shHuman...",
+      "sig": "base64-ed25519-sig...",
+      "cap": [
+        {
+          "uri": "solana:mainnet/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/transfer",
+          "lim": { "amt": "500000000", "per": 86400 }
+        },
+        {
+          "uri": "https://api.example.com/data",
+          "act": ["read", "write"],
+          "lim": { "rate": [5000, 3600] }
+        },
+        {
+          "uri": "gmail:alice@example.com/send",
+          "lim": { "cnt": 200, "per": 86400 }
+        },
+        {
+          "uri": "github:acme/*/push",
+          "lim": { "cnt": 100, "per": 86400 }
+        }
+      ],
+      "exp": 1740758554,
+      "prf": []
+    },
+
+    "rsn": "Daily portfolio rebalancing and status reporting"
+  }
+}

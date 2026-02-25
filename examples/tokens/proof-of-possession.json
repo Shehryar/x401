@@ -1,0 +1,30 @@
+{
+  "_comment": "Proof-of-possession JWT (DPoP-style, RFC 9449). Sent alongside the ACT to prove the agent holds the private key.",
+
+  "header": {
+    "typ": "act-pop+jwt",
+    "alg": "EdDSA"
+  },
+
+  "payload": {
+    "ath": "sha256-of-the-ACT",
+    "htm": "POST",
+    "htu": "https://gateway.x401.dev/gmail/send",
+    "htb": "sha256-of-request-body",
+    "iat": 1708300000,
+    "jti": "unique-nonce-abc123"
+  },
+
+  "_fields": {
+    "ath": "SHA-256 hash of the ACT. Binds this proof to a specific token.",
+    "htm": "HTTP method of the request.",
+    "htu": "Target URL. Prevents proof reuse against different endpoints.",
+    "htb": "SHA-256 hash of the request body. Required for POST/PUT/PATCH. Prevents body swapping.",
+    "iat": "When the proof was created. Verifier rejects if older than 60 seconds.",
+    "jti": "Unique nonce. Verifier maintains a short-lived replay cache to reject duplicates."
+  },
+
+  "_http_example": {
+    "request": "POST /gmail/send HTTP/1.1\nHost: gateway.x401.dev\nAuthorization: ACT eyJhbGciOiJFZERTQSIs...\nX-X401-Proof: eyJ0eXAiOiJhY3QtcG9wK2p3dCIs..."
+  }
+}
